@@ -2,15 +2,19 @@
 
 A Streamlit app for adding watermarks to **images, PDFs and text documents**. The watermark can be **text** or an **image** (e.g. a logo), placed **once** or **repeated as a slanted pattern**, with control over opacity, size, rotation, font and color.
 
+### ▶ [Open Watermark Studio in your browser](https://fei7fei.github.io/watermark-creation-tool/)
+
+No install needed. The app runs entirely in your browser, so **your files are never uploaded to any server**. The first visit takes about 15–30 seconds to load; after that it's cached.
+
 | Repeated, slanted text | Single stamp | Repeated logo |
 |---|---|---|
 | ![tiled](docs/example-tiled.jpg) | ![single](docs/example-single.jpg) | ![logo](docs/example-logo.jpg) |
 
 ---
 
-## Quick start
+## Run it on your own computer
 
-Requires **Python 3.10+**.
+The [web version](https://fei7fei.github.io/watermark-creation-tool/) has every feature. Running it locally is faster, lists the fonts installed on your computer, and works offline. Requires **Python 3.10+**.
 
 ```bash
 git clone https://github.com/fei7fei/watermark-creation-tool.git
@@ -33,7 +37,7 @@ Streamlit opens the app in your browser (usually at http://localhost:8501).
 1. **Set up the watermark** in the left sidebar.
 2. **Upload** one or more files in the main area.
 3. Check the **side-by-side preview** (original vs. watermarked). It updates as you move the sliders.
-4. Click **Download** to get the watermarked file, or **Download all (.zip)** if you uploaded several.
+4. Click **Download** to get the watermarked file, or **Download all (.zip)** if you uploaded several. In the web version, first click **Prepare** (this renders the full-resolution file), then **Download**.
 
 ### Supported input files
 
@@ -48,7 +52,8 @@ Streamlit opens the app in your browser (usually at http://localhost:8501).
 
 **Watermark type**
 - **Text**: type any text. Multi-line text works and is centred.
-  - **Font**: pick any font installed on your computer (the list is searchable), or upload a `.ttf` / `.otf` / `.ttc` file. *Default (built-in)* is a font that ships with Pillow, so it works everywhere.
+  - **Font**: the list is searchable. It starts with 8 fonts bundled with the app (Bebas Neue, Dancing Script, Lobster, Montserrat, Open Sans, Oswald, Playfair Display, Roboto Mono). When you run the app locally, the fonts installed on your computer follow. You can also upload any `.ttf` / `.otf` / `.ttc` file. *Default (built-in)* is a font that ships with Pillow.
+  - **Weight**: shown for fonts that come in several weights (Thin through Black, for example).
   - **Color**: any color. The default is mid-grey because it shows up on both light and dark backgrounds.
 - **Image**: upload a logo or other picture. A PNG with a transparent background gives the cleanest result.
   - **Make white background transparent**: for logos saved as JPG on white. Near-white pixels fade out smoothly, so you don't get a hard white box or a jagged halo.
@@ -77,10 +82,12 @@ Streamlit opens the app in your browser (usually at http://localhost:8501).
 
 ```
 app.py                     Streamlit UI: sidebar settings, upload, preview, downloads
+index.html                 Web version: runs app.py in the browser (GitHub Pages)
 watermarker/
 ├── core.py                Renders the watermark and composites it onto an image
 ├── documents.py           File handling: images, PDFs, text/DOCX → PDF conversion
-└── fonts.py               Finds fonts installed on the system
+└── fonts.py               Finds bundled and installed fonts
+fonts/                     Bundled open-source fonts (+ their licenses)
 ```
 
 ### 1. Rendering the watermark (`watermarker/core.py`)
@@ -127,18 +134,29 @@ open("report_wm.pdf", "wb").write(documents.watermark_pdf(pdf, s))
 
 ---
 
-## Deploying to Streamlit Community Cloud
+### 4. The web version (`index.html`)
 
-1. Push this repo to GitHub (already done if you're reading this there).
-2. Go to [share.streamlit.io](https://share.streamlit.io), click **New app**, select this repo and set the main file to `app.py`.
-3. Server machines have few fonts installed. Users can still use *Default (built-in)* or upload their own font file.
+GitHub Pages can only host static files, so it can't run a Python server. Instead, `index.html` uses [stlite](https://github.com/whitphx/stlite), which runs Streamlit on [Pyodide](https://pyodide.org) (Python compiled to WebAssembly) inside the visitor's browser. The page downloads `app.py`, the `watermarker/` package and the fonts, installs PyMuPDF and python-docx (Pillow comes with Pyodide), and then runs the same code as the local version.
+
+There are two differences from the local version, both detected with `sys.platform == "emscripten"`:
+- **Downloads take two clicks.** stlite can't build a file at the moment the download button is clicked, so **Prepare** renders it first. The result is kept until you change a setting or a file.
+- **Only bundled or uploaded fonts.** A web page can't read the fonts installed on your computer.
+
+**Deployment:** GitHub Pages serves the `main` branch root (*Settings → Pages → Deploy from a branch → main / root*). Every push to `main` updates the live site within a minute or two. The `.nojekyll` file stops GitHub from hiding files that start with `_` (such as `__init__.py`). **If you add a new Python module or font, add it to the `sources` list in `index.html`**, or the web version won't find it.
+
+To test the web version locally: `python -m http.server 8000`, then open http://localhost:8000.
 
 ## Limitations
 
+- The web version is slower than running locally (Python runs as WebAssembly), and very large files can run into browser memory limits.
 - Watermarks on image files are part of the pixels and can't be removed. PDF watermarks are a separate layer unless you choose **Flatten**.
 - DOCX conversion keeps text structure only (see above).
 - Very large images (e.g. > 50 MP) can take a few seconds to process at full resolution.
 
 ## Tech stack
 
-[Streamlit](https://streamlit.io) · [Pillow](https://python-pillow.org) · [PyMuPDF](https://pymupdf.readthedocs.io) · [python-docx](https://python-docx.readthedocs.io)
+[Streamlit](https://streamlit.io) · [stlite](https://github.com/whitphx/stlite) · [Pillow](https://python-pillow.org) · [PyMuPDF](https://pymupdf.readthedocs.io) · [python-docx](https://python-docx.readthedocs.io)
+
+## Credits
+
+Bundled fonts are from [Google Fonts](https://fonts.google.com) and are licensed under the SIL Open Font License 1.1. Each font's license is in [`fonts/licenses/`](fonts/licenses/).

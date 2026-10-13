@@ -22,6 +22,7 @@ class WatermarkSettings:
     kind: str = "text"                  # "text" or "image"
     text: str = "CONFIDENTIAL"
     font_bytes: bytes | None = None     # TrueType/OpenType font data; None = Pillow's bundled font
+    font_weight: str | None = None      # named instance of a variable font, e.g. "Bold"
     color: str = "#808080"
     image_bytes: bytes | None = None    # watermark image (logo) data
     remove_white_bg: bool = False       # make near-white pixels of the logo transparent
@@ -44,9 +45,15 @@ class WatermarkSettings:
 
 def _load_font(settings: WatermarkSettings, px: int) -> ImageFont.FreeTypeFont:
     px = max(1, int(px))
-    if settings.font_bytes:
-        return ImageFont.truetype(io.BytesIO(settings.font_bytes), px)
-    return ImageFont.load_default(px)
+    if not settings.font_bytes:
+        return ImageFont.load_default(px)
+    font = ImageFont.truetype(io.BytesIO(settings.font_bytes), px)
+    if settings.font_weight:
+        try:
+            font.set_variation_by_name(settings.font_weight)
+        except Exception:
+            pass  # static font or unknown weight: use the font as-is
+    return font
 
 
 def _apply_opacity(img: Image.Image, opacity: float) -> Image.Image:

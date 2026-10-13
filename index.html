@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Watermark Studio</title>
+    <meta name="description" content="Add text or image watermarks to images, PDFs and documents, right in your browser. Files never leave your computer." />
+    <link rel="icon" href="docs/icon.ico" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/browser@1.9.1/build/stlite.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>Watermark Studio needs JavaScript enabled.</noscript>
+    <script type="module">
+      // Runs the Streamlit app (app.py) entirely in the browser via stlite + Pyodide.
+      // Everything is processed locally: uploaded files are never sent to a server.
+      import { mount } from "https://cdn.jsdelivr.net/npm/@stlite/browser@1.9.1/build/stlite.js";
+
+      // Every file the app needs must be listed here (paths are relative to this page).
+      const sources = [
+        "app.py",
+        "watermarker/__init__.py",
+        "watermarker/core.py",
+        "watermarker/documents.py",
+        "watermarker/fonts.py",
+        "fonts/BebasNeue.ttf",
+        "fonts/DancingScript.ttf",
+        "fonts/Lobster.ttf",
+        "fonts/Montserrat.ttf",
+        "fonts/OpenSans.ttf",
+        "fonts/Oswald.ttf",
+        "fonts/PlayfairDisplay.ttf",
+        "fonts/RobotoMono.ttf",
+      ];
+
+      mount(
+        {
+          requirements: ["pymupdf", "python-docx"],
+          entrypoint: "app.py",
+          files: Object.fromEntries(sources.map((path) => [path, { url: `./${path}` }])),
+          streamlitConfig: { "client.toolbarMode": "viewer" }, // hide the "Deploy" button
+        },
+        document.getElementById("root"),
+      );
+    </script>
+  </body>
+</html>

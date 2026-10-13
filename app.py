@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
+import sys
 import zipfile
 from pathlib import Path
 
@@ -11,10 +13,11 @@ from PIL import Image
 
 from watermarker import POSITIONS, WatermarkSettings, watermark_image
 from watermarker import documents as docs
-from watermarker.fonts import system_fonts
+from watermarker.fonts import bundled_fonts, system_fonts, variation_names
 
 PREVIEW_MAX_PX = 1400
 DEFAULT_FONT = "Default (built-in)"
+IN_BROWSER = sys.platform == "emscripten"  # running via stlite/Pyodide (GitHub Pages)
 
 st.set_page_config(page_title="Watermark Studio", page_icon="💧", layout="wide")
 
@@ -59,14 +62,20 @@ def sidebar_settings() -> WatermarkSettings:
     if s.kind == "text":
         s.text = sb.text_area("Text", "CONFIDENTIAL", height=80,
                               help="Multiple lines are supported.")
-        fonts = system_fonts()
+        bundled = bundled_fonts()
+        fonts = {**bundled, **{k: v for k, v in system_fonts().items() if k not in bundled}}
         choice = sb.selectbox("Font", [DEFAULT_FONT, *fonts],
-                              help="Fonts installed on this computer. Type to search.")
+                              help="The first few fonts are bundled with the app; when running "
+                                   "locally, fonts installed on your computer follow. Type to search.")
         custom = sb.file_uploader("…or upload a font (.ttf / .otf)", type=["ttf", "otf", "ttc"])
         if custom is not None:
             s.font_bytes = custom.getvalue()
         elif choice != DEFAULT_FONT:
             s.font_bytes = read_font(fonts[choice])
+        weights = variation_names(s.font_bytes) if s.font_bytes else []
+        if weights:
+            s.font_weight = sb.selectbox(
+                "Weight", weights, index=weights.index("Regular") if "Regular" in weights else 0)
         s.color = sb.color_picker("Color", "#808080", help="Mid-grey shows up on both light and dark backgrounds.")
     else:
         logo = sb.file_uploader("Watermark image (PNG with transparency works best)",
@@ -196,18 +205,45 @@ def main() -> None:
     st.subheader("Download")
     col1, col2 = st.columns(2)
     with col1:
-        st.download_button(
+        download_button(
             f"⬇️ Download {current}",
-            data=lambda: process_file(current, data, s, img_fmt, quality, flatten),
+            make=lambda: process_file(current, data, s, img_fmt, quality, flatten),
             file_name=process_name(current, img_fmt),
-            mime=mime_for(process_name(current, img_fmt)),
-            type="primary", width="stretch")
+            signature=(s, current, data, img_fmt, quality, flatten), key="dl_one", primary=True)
     if len(files) > 1:
         with col2:
-            st.download_button(
+            download_button(
                 f"🗜️ Download all {len(files)} files (.zip)",
-                data=lambda: build_zip(files, s, img_fmt, quality, flatten),
-                file_name="watermarked.zip", mime="application/zip", width="stretch")
+                make=lambda: build_zip(files, s, img_fmt, quality, flatten),
+                file_name="watermarked.zip",
+                signature=(s, files, img_fmt, quality, flatten), key="dl_zip")
+
+
+def download_button(label: str, make, file_name: str, signature, key: str,
+                    primary: bool = False) -> None:
+    """Download button that only renders the full-resolution output when needed.
+
+    Locally, Streamlit calls `make` when the button is clicked. In the browser build
+    (stlite on GitHub Pages) deferred downloads aren't supported, so the user first
+    clicks "Prepare"; the result is kept until any setting or file changes.
+    """
+    kind = "primary" if primary else "secondary"
+    mime = mime_for(file_name)
+    if not IN_BROWSER:
+        st.download_button(label, data=make, file_name=file_name, mime=mime,
+                           key=key, type=kind, width="stretch")
+        return
+
+    sig = hashlib.sha1(repr(signature).encode()).hexdigest()
+    ready = st.session_state.get(key)
+    if ready and ready[0] == sig:
+        st.download_button(label, data=ready[1], file_name=file_name, mime=mime,
+                           key=f"{key}_save", type=kind, width="stretch")
+    elif st.button(label.replace("Download", "Prepare", 1), key=f"{key}_prep",
+                   type=kind, width="stretch"):
+        with st.spinner("Rendering full-resolution output…"):
+            st.session_state[key] = (sig, make())
+        st.rerun()
 
 
 def build_zip(files, s, img_fmt, quality, flatten) -> bytes:
